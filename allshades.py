@@ -40,11 +40,71 @@ def hilbert_carpet(n,k):
         [x[0][0],x[0][1],x[1]] for x in itertools.product(curve, np.linspace(0,1,k))
     ])
 
+    # standard square mesh
+    tris = []
+    (nx,ny) = (k,len(curve))
+    for i in range(nx-1):
+        for j in range(ny-1):
+
+            index = lambda i,j: i + nx* j;
+
+            tris.append([index(i,j),index(i,j+1), index(i+1, j+1)])
+            tris.append([index(i,j),index(i+1,j+1), index(i+1, j)])
     
-    
+    return points, tris, nx, ny
+
+    # Triangle layout
+    # . ny (points along the Hilbert curve)
+    # . 
+    # .  (i,j+1) - (i+1,j+1)
+    # .  | .  /     |
+    # .  (i,j) -- (i+1,j)
+    #  -> Z axis (extrusion axis) + order of points ... nx 
+
+# write to files. expect flat lists
+def write_obj(file,points,tris):
+    with open(file, "w") as f:
+        for v in points:
+            f.write(f"v {v[0]} {v[1]} {v[2]}\n")
+        
+        for t in tris:
+            #obj face indices start at 1
+            f.write(f"f {t[0]+1} {t[1]+1} {t[2]+1}\n")
+
+def write_ply(file, points, tris, colors):
+    with open(file, "w") as f:
+        f.write("ply\n");
+        f.write("format ascii 1.0\n")
+        f.write(f"element vertex {len(points)}\n")
+        f.write("property float x\n")
+        f.write("property float y\n")
+        f.write("property float z\n")
+        f.write("property uchar red\n")
+        f.write("property uchar green \n")
+        f.write("property uchar blue \n")
+        f.write(f"element face {len(tris)}\n")
+        f.write("property list uchar int vertex_indices\n")
+        f.write("end_header\n")
+        for v, c in zip(points, colors):
+            f.write(f"{v[0]} {v[1]} {v[2]} {c[0]} {c[1]} {c[2]}\n")
+        for t in tris:
+            f.write(f"3 {t[0]} {t[1]} {t[2]}\n")
+
+def animate_flattening(points, width, height, scale, time):
+    result = points.reshape(height, width, 3)
+    for x in range(height):
+        for y in range(width):
+            p = result[x,y] 
+            v = y / (width -1) # inversion ?
+            u = x / (height - 1)
+
+            target = np.array([scale[0] * u, 0.0, scale[1] * v ])
+
+            #linerp for now
+            result[x,y] = time * target + (1.0 - time) * p
 
 
-    
+    return result.reshape(points.shape)
 
 def hilbert_curve_param(points, t):
     num_segments = points.shape[0] - 1
@@ -93,23 +153,31 @@ def flag(h, w, sampler):
 #flag(100,200,red)
 #flag(100,200,hue1d)
 
-plt.gca().set_aspect(1.0)
-plt.gca().set_xlim([0,1])
-plt.gca().set_ylim([0,1])
+#plt.gca().set_aspect(1.0)
+#plt.gca().set_xlim([0,1])
+#plt.gca().set_ylim([0,1])
 #draw_hilbert_curve(plt.gca(),hilbert_curve_points(1), 'r') 
 #draw_hilbert_curve(plt.gca(),hilbert_curve_points(2), 'b') 
 #draw_hilbert_curve(plt.gca(),hilbert_curve_points(3), 'g') 
-p4 = hilbert_curve_points(4)
-draw_hilbert_curve(plt.gca(),p4, 'c') 
+p4 = hilbert_curve_points(2)
+#draw_hilbert_curve(plt.gca(),p4, 'c') 
 
 pts = np.array([hilbert_curve_param(p4, t) for t in np.linspace(0,1,127)])
 x = pts[:,0]
 y = pts[:,1]
-plt.gca().scatter(x,y)
+#plt.gca().scatter(x,y)
 
-hilbert_carpet(1,3)
+v,t, width, height = hilbert_carpet(2,4)
+#write_obj("test.obj", v,t)
 
-plt.show()
+c =  (255.0 * v).astype('uint8')
+write_ply("test.ply", v, t, c)
+
+
+for time in np.linspace(0,1,11):
+    vt = animate_flattening(v,width, height, (5.0, 1.0), time)
+    write_ply(f"test{time:.3f}.ply", vt, t,c)
+#plt.show()
 
  
 
